@@ -1,0 +1,21 @@
+---
+title: "Assignment-1"
+author: "Maria Dimitriu"
+date: "2/27/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(epiwraps)
+```
+
+
+```{r}
+sessionInfo()
+```
