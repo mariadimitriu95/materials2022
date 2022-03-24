@@ -1,0 +1,94 @@
+---
+title: "W4"
+output: html_document
+date: '2022-03-22'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+})
+ah <- AnnotationHub()
+display(ah)
+```
+
+```{r, eval=FALSE}
+options(timeout=1800)
+download.file("https://www.encodeproject.org/files/ENCFF001LJN/@@download/ENCFF001LJN.fastq.gz", dest="raw/p300_ESC.fastq.gz")
+```
+
+```{bash engine.opts='-l', eval=FALSE}
+mkdir -p raw_fastqc
+fastqc -o raw_fastqc --threads 4 raw/p300_ESC.fastq.gz
+```
+
+```{bash engine.opts='-l', eval=FALSE}
+mkdir -p trimmed
+trimmomatic SE -threads 4 -summary trimmed/p300_ESC.stats -phred33 raw/p300_ESC.fastq.gz trimmed/p300_ESC.fastq.gz ILLUMINACLIP:TruSeq3-SE.fa:2:15:4:4:true LEADING:20 TRAILING:20 SLIDINGWINDOW:4:15 MINLEN:25 ## Dropped 1.6% of reads
+```
+
+```{r, eval=FALSE}
+# we get the genome sequence from AnnotationHub
+mm10_genome <- ah[["AH49775"]] ##2bit file for mm10
+# we create a new directory that will contain the genome index
+dir.create("mm10_genome")
+# we write the genome sequence in fasta format
+export(import.2bit(mm10_genome), "mm10_genome/mm10.fasta.gz", compress=TRUE)
+```
+
+```{bash engine.opts='-l', eval=FALSE}
+gunzip mm10_genome/mm10.fasta.gz
+bowtie2-build --threads 8 mm10.fasta ./bowtie2
+```
+
+```{bash, eval=FALSE}
+mkdir -p aligned
+(bowtie2 -p 8 -x ./bowtie2 -U ./trimmed/p300_ESC.fastq.gz) 2>aligned/p300_ESC.bowtie2 | samtools view -bS - | samtools sort -@8 -m 2G - > aligned/p300_ESC.bam
+samtools index aligned/p300_ESC.bam
+
+## 17664660 reads; of these: 17664660 (100.00%) were unpaired; 
+## of these: 315564 (24.43%) aligned 0 times
+# 9797501 (55.46%) aligned exactly 1 time
+# 3551595 (20.11%) aligned >1 times
+# 75.57% overall alignment rate
+```
+
+```{bash engine.opts='-l', eval=FALSE}
+mkdir -p tracks
+bamCoverage -p 2 --binSize 10 --normalizeUsing CPM -b aligned/p300_ESC.bam -o tracks/p300_ESC.bw
+```
+```{bash engine.opts='-l', eval=FALSE}
+mkdir -p peaks
+macs2 callpeak --outdir peaks -n p300 --gsize mm -t aligned/p300_ESC.bam ##84110 peaks
+```
+
+# How many peaks overlap - used the ENCODE BED file here
+
+```{r}
+peaks_p300 <- rtracklayer::import("peaks/ENCFF397PQB.bed", format = "narrowPeak")
+peaks_H3K4me3 <- rtracklayer::import("peaks/H3K4me3.bed", format = "narrowPeak")
+peaks_H3K4me1 <- rtracklayer::import("peaks/H3K4me1.bed", format = "narrowPeak")
+peaks_H3K27me3 <- rtracklayer::import("peaks/H3K27me3.bed", format = "narrowPeak")
+peaks_H3K27ac <- rtracklayer::import("peaks/H3K27ac.bed", format = "narrowPeak")
+
+peaksOverlapsH3K4me3 <- overlapsAny(peaks_p300, peaks_H3K4me3)
+table(peakOverlapsH3K4me3) ## 49015 peaks overlap H3K4me3 peaks
+
+peaksOverlapsH3K4me1 <- overlapsAny(peaks_p300, peaks_H3K4me1)
+table(peaksOverlapsH3K4me1) ## 65736 peaks overlap H3K4me1 peaks
+
+peaksOverlapsH3K27me3 <- overlapsAny(peaks_p300, peaks_H3K27me3)
+table(peaksOverlapsH3K27me3) ## 7314 peaks overlap H3K27me3
+
+peaksOverlapsH3K27ac <- overlapsAny(peaks_p300, peaks_H3K27ac)
+table(peaksOverlapsH3K27ac) ## 47832 peaks overlap H3K27ac
+```
