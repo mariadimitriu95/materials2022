@@ -1,0 +1,61 @@
+---
+title: "assignment"
+output: html_document
+date: '2022-04-25'
+---
+
+```{r, eval = FALSE}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(AnnotationHub)
+  library(MotifDb)
+  library(memes)
+  library(universalmotif)
+  library(ensembldb)
+  library(ggplot2)
+})
+ah <- AnnotationHub(localHub=TRUE)
+ensdb <- ah[["AH89211"]]
+```
+
+```{r, eval = FALSE}
+# get GCR sites
+motif_GCR <- query(MotifDb, c("GCR","Mus"))[[1]]
+genome <- ah[["AH68356"]]
+# get the sequence for chr19:
+chr19 <- GRanges("19", IRanges(1L,seqlengths(genome)["19"]))
+chr19 <- setNames(getSeq(genome, chr19), "19")
+# find motifs
+moi_GCR <- runFimo(chr19, convert_motifs(motif_GCR), meme_path = "/mnt/IM/conda/bin/")
+# restrict to motifs within accessible regions (peaks)
+## motifs_GCR <- findMotifInstances(chr19, moi_GCR)
+accessible_regions <- callPeaks("atac.chr19.bam")
+seqlevelsStyle(accessible_regions) <- "Ensembl"
+accessible_motifs_GCR <- moi_GCR[overlapsAny(moi_GCR, accessible_regions)]
+
+# CTCF sites
+motif_CTCF <- query(MotifDb, c("CTCF","Mus"))[[1]]
+moi_CTCF <- runFimo(chr19, convert_motifs(motif_CTCF), meme_path = "/mnt/IM/conda/bin/")
+```
+
+## Plotting signal around the motif occurences
+
+```{r, eval = FALSE}
+# we prepare the list of tracks
+track_full_cuts <- "full_cuts.bw"
+motifs <- c(accessible_motifs_GCR, moi_CTCF)
+# extract signals around the motif occurences
+# we zoom in to 500bp around the motif centers, in windows of 5bp
+sm_GCR <- signal2Matrix(track_full_cuts, accessible_motifs_GCR, w=5, extend=500)
+# plot the signals:
+plotEnrichedHeatmaps(sm_GCR, trim=0.95)
+# we renormalize using border backgrounds
+smb_GCR <- renormalizeBorders(sm_GCR)
+plotEnrichedHeatmaps(smb_GCR, trim=0.95, scale_title = "signal around acc. GCR motifs")
+sm_CTCF <- signal2Matrix(track_full_cuts, moi_CTCF, w=5, extend=500)
+# plot the signals:
+plotEnrichedHeatmaps(sm_CTCF, trim=0.95)
+# we renormalize using border backgrounds
+smb_CTCF <- renormalizeBorders(sm_CTCF)
+plotEnrichedHeatmaps(smb_CTCF, trim=0.95, scale_title = "signal around CTCF motifs")
+```
