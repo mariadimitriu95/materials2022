@@ -1,0 +1,24 @@
+---
+title: "assignment"
+author: "Leo Steg & Maria Dimitriu"
+date: "5/5/2022"
+output: html_document
+---
+
+1. Topic: Epigenome dynamics across murine forebrain postnatal development
+
+2. Data: H3K4me3, H3K27me3 and H3K4me1 ChIP-seq and ATAC-seq 
+Timepoints: PND 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5
+
+```{r}
+datasets <- data.frame(H3K4me3 = c("ENCFF898EWU, ENCFF403SQM", "ENCFF001ZTX, ENCFF001ZTY", "ENCFF232IYQ, ENCFF470QWO", "ENCFF596BNN, ENCFF053SSJ", "ENCFF002AME, ENCFF002AMD", "ENCFF212KTV, ENCFF082LJL", "ENCFF002BWS, ENCFF002BWU"),
+                       H3K27me3 = c("ENCFF429ISC, ENCFF445IOU", "ENCFF001ZTI, ENCFF107TLH", "ENCFF811HJY, ENCFF326UOO", "ENCFF406FUF, ENCFF900XIV", "ENCFF002AFY, ENCFF002AFZ", "ENCFF096XZW, ENCFF079GEV", "ENCFF002ESD, ENCFF002ESA"),
+                       H3K4me1 = c("ENCFF069IQM, ENCFF981WQT", "ENCFF123MKU, ENCFF001ZRT", "ENCFF115BHE, ENCFF128OTX", "ENCFF388QNU, ENCFF106YCA", "ENCFF002AJC, ENCFF002AJE", "ENCFF482TKQ, ENCFF086BUY", "ENCFF002ESR, ENCFF002EST"),
+                       ATAC = c(NA, "ENCFF419LDW, ENCFF083TDB", "ENCFF413XTH, ENCFF199UBT", "ENCFF401VUV, ENCFF721LGJ", "ENCFF048MTG, ENCFF633MTW", "ENCFF906VXU, ENCFF248PXW", "ENCFF776GDQ, ENCFF058IAE")
+)
+rownames(datasets) <- c("PND10.5", "PND11.5", "PND12.5", "PND13.5", "PND14.5", "PND15.5", "PND16.5")
+print(datasets)
+```
+
+3. Question: How do the patterns of HPTMs and chromatin accessibility change across forebrain development? We would like to address this question by integrating the ChIP-seq and ATAC-seq data for each timepoint. 
+
