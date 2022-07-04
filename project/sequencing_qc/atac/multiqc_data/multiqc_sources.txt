@@ -1,0 +1,13 @@
+Module	Section	Sample Name	Source
+FastQC	all_sections	ENCFF248PXW	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF248PXW_fastqc.zip
+FastQC	all_sections	ENCFF776GDQ	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF776GDQ_fastqc.zip
+FastQC	all_sections	ENCFF401VUV	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF401VUV_fastqc.zip
+FastQC	all_sections	ENCFF058IAE	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF058IAE_fastqc.zip
+FastQC	all_sections	ENCFF419LDW	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF419LDW_fastqc.zip
+FastQC	all_sections	ENCFF199UBT	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF199UBT_fastqc.zip
+FastQC	all_sections	ENCFF721LGJ	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF721LGJ_fastqc.zip
+FastQC	all_sections	ENCFF906VXU	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF906VXU_fastqc.zip
+FastQC	all_sections	ENCFF633MTW	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF633MTW_fastqc.zip
+FastQC	all_sections	ENCFF048MTG	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF048MTG_fastqc.zip
+FastQC	all_sections	ENCFF083TDB	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF083TDB_fastqc.zip
+FastQC	all_sections	ENCFF413XTH	/mnt/groupMansuy/epibioinfo/output/qc/atac/ENCFF413XTH_fastqc.zip

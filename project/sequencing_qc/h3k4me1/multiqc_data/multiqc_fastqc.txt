@@ -1,0 +1,15 @@
+Sample	Filename	File type	Encoding	Total Sequences	Sequences flagged as poor quality	Sequence length	%GC	total_deduplicated_percentage	avg_sequence_length	basic_statistics	per_base_sequence_quality	per_tile_sequence_quality	per_sequence_quality_scores	per_base_sequence_content	per_sequence_gc_content	per_base_n_content	sequence_length_distribution	sequence_duplication_levels	overrepresented_sequences	adapter_content
+ENCFF002AJC	ENCFF002AJC.fastq.gz	Conventional base calls	Illumina 1.5	41962499.0	0.0	36.0	43.0	89.11610552052429	36.0	pass	pass	pass	pass	pass	pass	pass	pass	pass	pass	pass
+ENCFF002AJE	ENCFF002AJE.fastq.gz	Conventional base calls	Illumina 1.5	39405395.0	0.0	36.0	43.0	89.38617561349348	36.0	pass	pass	pass	pass	pass	pass	pass	pass	pass	pass	pass
+ENCFF002ESR	ENCFF002ESR.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	31691758.0	0.0	36.0	45.0	86.42689655483576	36.0	pass	pass	pass	pass	warn	pass	pass	pass	pass	pass	pass
+ENCFF002EST	ENCFF002EST.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	32594269.0	0.0	36.0	45.0	84.5752436950256	36.0	pass	pass	pass	pass	pass	pass	pass	pass	pass	pass	pass
+ENCFF069IQM	ENCFF069IQM.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	86228487.0	0.0	35-51	46.0	90.10060212974356	50.49514528765882	pass	pass	fail	pass	fail	pass	pass	warn	pass	pass	pass
+ENCFF086BUY	ENCFF086BUY.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	84338246.0	0.0	50.0	43.0	87.85376079528507	50.0	pass	pass	fail	pass	pass	pass	pass	pass	pass	warn	pass
+ENCFF106YCA	ENCFF106YCA.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	67831017.0	0.0	50.0	44.0	90.37911707629898	50.0	pass	pass	fail	pass	pass	pass	pass	pass	pass	pass	pass
+ENCFF115BHE	ENCFF115BHE.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	71900215.0	0.0	35-51	45.0	90.6084211003483	50.50378522512067	pass	pass	fail	pass	fail	pass	pass	warn	pass	pass	pass
+ENCFF123MKU	ENCFF123MKU.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	7063039.0	0.0	50.0	44.0	83.57008340742442	50.0	pass	pass	warn	pass	warn	pass	pass	pass	pass	pass	pass
+ENCFF128OTX	ENCFF128OTX.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	56288492.0	0.0	35-51	45.0	90.99670066555984	50.504672269422315	pass	pass	fail	pass	fail	pass	pass	warn	pass	pass	pass
+ENCFF388QNU	ENCFF388QNU.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	69401084.0	0.0	50.0	44.0	90.64694780745548	50.0	pass	pass	fail	pass	pass	pass	pass	pass	pass	pass	pass
+ENCFF482TKQ	ENCFF482TKQ.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	72858881.0	0.0	50.0	43.0	89.14362709635407	50.0	pass	pass	fail	pass	pass	pass	pass	pass	pass	pass	pass
+ENCFF952SFK	ENCFF952SFK.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	13435249.0	0.0	50.0	44.0	82.98596896483355	50.0	pass	pass	warn	pass	warn	pass	pass	pass	pass	pass	pass
+ENCFF981WQT	ENCFF981WQT.fastq.gz	Conventional base calls	Sanger / Illumina 1.9	82726890.0	0.0	35-51	46.0	89.62120831787456	50.49996249103526	pass	pass	fail	pass	fail	pass	pass	warn	pass	pass	pass

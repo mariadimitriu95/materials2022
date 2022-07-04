@@ -1,0 +1,15 @@
+Module	Section	Sample Name	Source
+FastQC	all_sections	ENCFF445IOU	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF445IOU_fastqc.zip
+FastQC	all_sections	ENCFF406FUF	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF406FUF_fastqc.zip
+FastQC	all_sections	ENCFF811HJY	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF811HJY_fastqc.zip
+FastQC	all_sections	ENCFF326UOO	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF326UOO_fastqc.zip
+FastQC	all_sections	ENCFF107TLH	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF107TLH_fastqc.zip
+FastQC	all_sections	ENCFF096XZW	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF096XZW_fastqc.zip
+FastQC	all_sections	ENCFF079GEV	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF079GEV_fastqc.zip
+FastQC	all_sections	ENCFF002AFY	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF002AFY_fastqc.zip
+FastQC	all_sections	ENCFF002AFZ	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF002AFZ_fastqc.zip
+FastQC	all_sections	ENCFF954LPU	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF954LPU_fastqc.zip
+FastQC	all_sections	ENCFF429ISC	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF429ISC_fastqc.zip
+FastQC	all_sections	ENCFF002ESD	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF002ESD_fastqc.zip
+FastQC	all_sections	ENCFF900XIV	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF900XIV_fastqc.zip
+FastQC	all_sections	ENCFF002ESA	/mnt/groupMansuy/epibioinfo/output/qc/h3k27me3/ENCFF002ESA_fastqc.zip
