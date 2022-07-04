@@ -1,0 +1,195 @@
+---
+title: "ATAC trajectories in forebrain development"
+author: "Maria Dimitriu & Leonard C. Steg"
+date: '2022-06-16'
+output: html_document
+---
+
+
+## Loading packages
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(GenomicRanges)
+  library(SummarizedExperiment) # structure to contain data+annotation
+  library(sechm) # for plotting heatmaps from SummarizedExperiment objects
+  library(edgeR) # count-based differential analysis
+  library(Rsubread) # for counting reads
+  library(ggplot2) # for plotting
+  library(patchwork) # for arranging plots together
+  library(AnnotationHub)
+  library(BiocParallel)
+  library(cowplot)
+  library(parallel)
+  library(patchwork)
+  library(viridis)
+})
+```
+
+## Loading ATAC peaks and exploration
+```{r, message=F, fig.cap = "Figure 1: Heatmap indicating the ATAC peak overlaps between samples of different time points. Samples were clustered based on peak-similarity using kmeans clustering. Upset plot to visualize numbers of overlapping peaks between all samples."}
+
+peakfiles.atac <- list.files("../data/peaks/atac", pattern = "narrowPeak", full=TRUE)
+names(peakfiles.atac) <- gsub("_peaks\\.narrowPeak","",basename(peakfiles.atac))
+peakfiles.atac
+
+peaks.atac <- lapply(peakfiles.atac, FUN=rtracklayer::import)
+regionOverlaps(peaks.atac)
+regionUpset(peaks.atac, nsets = 6, nintersects = NA)
+
+```
+Both, heatmap and upset plot, showed that the peaks of time point E11.5 have the least overlap with all the other samples. There is a significant proportion of peaks (~44K) which overlap in all samples. The clustering at the heatmap indicates similarities in the early time points, 11.5 and 12.5, and in the later developmental stages, since E15.5 and E16.5 are the most similar.
+
+## Definition of regions, quantification normalization and subsetting of peaks of interest
+
+### Define new regions by overlapping peaks of all ATAC datasets and remove regions that are only present in one sample each
+```{r}
+merged.peaks.atac <- reduce(unlist(GRangesList(peaks.atac)), with.revmap=TRUE)
+merged.peaks.atac <- granges(merged.peaks.atac[lengths(merged.peaks.atac$revmap)>1])
+merged.peaks.atac
+```
+
+### Quantifying counts in newly defined overlapping regions. 
+```{r, eval = F, message=F}
+
+bamfiles.atac <- list.files("../data/merged", pattern="ATAC_E1.\\.5.bam$", full=TRUE)
+
+names(bamfiles.atac) <- gsub("\\.bam","",basename(bamfiles.atac))
+
+anno.atac <- cbind(name=as.character(merged.peaks.atac), as.data.frame(merged.peaks.atac))
+anno.atac$width <- NULL
+colnames(anno.atac) <- c("GeneID", "Chr", "Start", "End", "Strand")
+
+fc.atac <- featureCounts(files=bamfiles.atac, 
+                     isPairedEnd=FALSE,
+                     annot.ext=anno.atac,    
+                     readExtension3=50, 
+                     nthreads=16        
+                    )
+```
+
+### Normalizing samples (and extract normalization factors) 
+```{r, eval = F}
+se.atac <- SummarizedExperiment( list(counts=fc.atac$counts), rowRanges=merged.peaks.atac )
+se.atac
+
+dds <- calcNormFactors(DGEList(assay(se.atac), group=se.atac$condition))
+assays(se.atac)$tmm.logcpm <- log1p(cpm(dds))
+
+colData(se.atac)$normfactors <- dds$samples$norm.factors
+
+saveRDS(se.atac, file = "../data/se/ATAC_cov_mergedPeaks.rds")
+```
+
+### Subsetting peaks based on variance across development. 
+```{r}
+se.atac <- readRDS(file = "../data/se/ATAC_cov_mergedPeaks.rds")
+tmm.logcpm <- assays(se.atac)$tmm.logcpm
+
+elementMetadata(merged.peaks.atac)$var <- (apply(tmm.logcpm, 1, function (x){var(x, na.rm = TRUE)})) 
+
+plot(density((merged.peaks.atac$var)))
+abline(v = 0.05, col = "red")
+
+merged.peaks.atac.sub <- merged.peaks.atac[merged.peaks.atac$var >= 0.05]
+length(merged.peaks.atac.sub)
+```
+## Preparation and annotation of DNase hypersensitivity data to identify regulatory regions.
+
+### Downloading file
+```{r, eval = F}
+download.file("https://www.encodeproject.org/files/ENCFF910SRW/@@download/ENCFF910SRW.tsv", "../data/annotation/DNaseHypersensitive.tsv")
+```
+
+### Annotation of DNase hypersensitivity file and subsetting for promotor regions and enhancer regions. 
+```{r}
+anno <- read.table(file = "../data/annotation/DNaseHypersensitive.tsv", sep = '\t', header = TRUE)
+
+anno <- GRanges(seqnames = anno$chr, ranges = IRanges(start = anno$start, end = anno$end))
+
+ah <- AnnotationHub()
+ensdb <- ah[["AH89211"]]
+
+seqlevelsStyle(anno) <- "ensembl"
+seqlevelsStyle(merged.peaks.atac.sub) <- "ensembl"
+
+overlaps <- merged.peaks.atac.sub[overlapsAny(merged.peaks.atac.sub, anno)]
+
+DNaseHS.regions <- annotateRegions(overlaps, ensdb)
+
+prom <- DNaseHS.regions[abs(DNaseHS.regions$distance2nearestTSS) < 1000]
+enh <- DNaseHS.regions[abs(DNaseHS.regions$distance2nearestTSS) > 1000]
+
+```
+## ATAC signal at promotor regions across forebrain development.
+
+```{r, message = F, fig.cap="Figure 2:Heatmaps showing promotor ATAC signals at the different developmental stages after the identification of five clusters."}
+seqlevelsStyle(prom) <- "UCSC"
+
+tracklist.atac <- list.files("../data/tracks/atac", full = T)
+
+dat.prom <- rescaleSignalMatrices(signal2Matrix(tracklist.atac, prom, BPPARAM = MulticoreParam(detectCores())),scaleFactors=1/se.atac$normfactors)
+
+set.seed(123) 
+cl.prom <- clusterSignalMatrices(dat.prom, k=5, scaleRows = T)
+
+plotEnrichedHeatmaps(dat.prom, row_split=cl.prom, scale_rows = "global", mean_color = c("1"="#F0D171", "2"="#D48849", "3"="#BD4545", "4"="#6D1950", "5" ="#20073A"))
+```
+```{r, fig.cap = "Figure 3: Mean ATAC signal of individual clusters per time point at promotor regions."}
+d.prom <- meltSignals(dat.prom, splitBy=cl.prom)
+
+source("extractMeanfromMelt.R")
+
+df.prom <- extractMeanfromMelt(d.prom)
+
+df.prom$Timepoint <- as.numeric(gsub("ATAC\\_E","", df.prom$Sample))
+
+ggplot(data = df.prom, aes(x = Timepoint, y = Mean, color = Split )) + 
+  geom_line(lwd = 2) + 
+  geom_point(cex = 4) + 
+  theme_cowplot() +
+  scale_color_manual(values=c("#f0d171", "#d48849", "#bd4545", "#6d1950", "#20073a")) +
+  ggtitle("Mean signal at promoter regions centers per Cluster") +
+  scale_x_continuous(breaks = unique(df.prom$Timepoint))
+```
+
+We identified 5 distinct clusters based on their promotor ATAC signal throughout forebrain development. Cluster 3 shows a strong increase from E11.5 to E16.5. Cluster 5 shows a brief increase. The others clusters are stable, but at different signal strengths.
+
+
+```{r, message=F, fig.cap="Figure 4: Heatmaps showing enhancer ATAC signals at the different developmental stages after the identification of five clusters."}
+
+seqlevelsStyle(enh) <- "UCSC"
+
+enh <- enh[seqnames(enh) == "chr1"]
+
+dat.enh <- rescaleSignalMatrices(signal2Matrix(tracklist.atac, enh, BPPARAM = MulticoreParam(detectCores())),scaleFactors=1/se.atac$normfactors)
+
+cl.enh <- clusterSignalMatrices(dat.enh, k=5, scaleRows = T)
+
+plotEnrichedHeatmaps(dat.enh, row_split=cl.enh, scale_rows = "global", mean_color = c("1"="#F0D171", "2"="#D48849", "3"="#BD4545", "4"="#6D1950", "5" ="#20073A"))
+```
+
+```{r, fig.cap = "Figure 5: Mean ATAC signal of individual clusters per time point at enhancer regions."}
+d.enh <- meltSignals(dat.enh, splitBy=cl.enh)
+
+source("extractMeanfromMelt.R")
+
+df.enh <- extractMeanfromMelt(d.enh)
+
+df.enh$Timepoint <- as.numeric(gsub("ATAC\\_E","", df.enh$Sample))
+
+ggplot(data = df.enh, aes(x = Timepoint, y = Mean, color = Split )) + 
+  geom_line(lwd = 2) + 
+  geom_point(cex = 4) + 
+  theme_cowplot() +
+  scale_color_manual(values=c("#f0d171", "#d48849", "#bd4545", "#6d1950", "#20073a")) +
+  ggtitle("Mean signal at enhancer regions centers per Cluster") +
+  scale_x_continuous(breaks = unique(df.enh$Timepoint))
+```
+We identified 5 distinct clusters based on their enhancer ATAC signal throughout forebrain development. Clusters 1 and 2 show an increase in enhancer signal strengths over time. Cluster 5 follows a slight decrease over time and clusters 3 and 4 are rather stable.
+
+
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,286 @@
+---
+title: "TSS Coverage Across Timepoints"
+output: html_document
+date: '2022-06-20'
+---
+
+### Load packages
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(GenomicRanges)
+  library(SummarizedExperiment)
+  library(sechm)
+  library(edgeR)
+  library(Rsubread) 
+  library(ggplot2) 
+  library(patchwork)
+  library(chipenrich.data) # contains the tss regions for mm10 with UCSC naming
+  library(cowplot)
+  library(patchwork)
+})
+```
+
+## Plotting clustered signal of each dataset around TSS +/- 2000 bp
+
+### Prepare the tracks 
+
+```{r}
+tracklist.atac <- list.files("../data/tracks/atac", pattern = "ATAC", full = T)
+tracklist.k4me3 <- list.files("../data/tracks/chip", pattern = "H3K4me3", full = T)
+tracklist.k27me3 <- list.files("../data/tracks/chip", pattern = "H3K27", full = T)
+
+tracklist <- c(tracklist.atac, tracklist.k4me3, tracklist.k27me3)
+
+tracks.E10.5 <- tracklist[grep("E10.5", tracklist)]
+tracks.E11.5 <- tracklist[grep("E11.5", tracklist)]
+tracks.E12.5 <- tracklist[grep("E12.5", tracklist)]
+tracks.E13.5 <- tracklist[grep("E13.5", tracklist)]
+tracks.E14.5 <- tracklist[grep("E14.5", tracklist)]
+tracks.E15.5 <- tracklist[grep("E15.5", tracklist)]
+tracks.E16.5 <- tracklist[grep("E16.5", tracklist)]
+```
+
+### Prepare the regions (TSS)
+
+```{r, warnings = F}
+tss <- tss.mm10 # function in the chipenrich package to get tss with UCSC naming
+tss.chr1 <- tss[seqnames(tss) == "chr1"]
+```
+
+## Identification of TSS regions with highest variance across datasets
+
+### Extracting the regions around TSS and preparing them for featureCounts 
+
+```{r}
+regions <- GRanges(seqnames = seqnames(tss), ranges = IRanges(start = start(tss)-2000, end = start(tss)+2000), seqlengths = seqlengths(tss))
+elementMetadata(regions)$GeneID <- tss$symbol
+regions
+
+anno.tss <- as.data.frame(regions)
+anno.tss$width <- NULL
+colnames(anno.tss) <- c("Chr", "Start", "End", "Strand", "GeneID")
+```
+### Preparing the aligned reads for featureCounts
+
+```{r}
+bamfiles.atac <- list.files("../data/merged", pattern="ATAC_E1.\\.5.bam$", full=TRUE)
+bamfiles.k4me3 <- list.files("../data/merged", pattern="H3K4me3_E1.\\.5.bam$", full=TRUE)
+bamfiles.k27me3 <- list.files("../data/merged", pattern="H3K27_E1.\\.5.bam$", full=TRUE)
+
+names(bamfiles.atac) <- gsub("\\.bam","",basename(bamfiles.atac))
+names(bamfiles.k4me3) <- gsub("\\.bam","",basename(bamfiles.k4me3))
+names(bamfiles.k27me3) <- gsub("\\.bam","",basename(bamfiles.k27me3))
+```
+
+### Using featureCounts to compute coverage of ATAC data at all TSS regions
+
+```{r, message = F, fig.cap = "Figure 1: Density plot showing the distribution of variance of the normalized ATAC counts at TSS regions. Red line represents the median density. All regions to the right of the red line are selected."}
+fc.atac <- featureCounts( files=bamfiles.atac,    
+                     isPairedEnd=FALSE,
+                     annot.ext=anno.tss,    
+                     readExtension3=50, 
+                     nthreads=16         
+                    )
+
+dds.atac <- calcNormFactors(DGEList(fc.atac$counts, group=names(bamfiles.atac)))
+tmm.logcpm.atac <- log1p(cpm(dds.atac))
+var.atac <- (apply(tmm.logcpm.atac, 1, function (x){var(x, na.rm = TRUE)})) 
+
+plot(density(var.atac))
+abline(v = quantile(var.atac)[3], col = "red")
+
+log.atac <- var.atac > quantile(var.atac)[3]
+```
+
+### Using featureCounts to compute coverage of H3K4me3 ChIP-seq data at all TSS regions
+
+```{r, message = F, fig.cap = "Figure 2: Density plot showing the distribution of variance of the normalized H3K4me3 counts at TSS regions. Red line represents the median density. All regions to the right of the red line are selected."}
+fc.k4me3 <- featureCounts( files=bamfiles.k4me3,    
+                     isPairedEnd=FALSE,
+                     annot.ext=anno.tss,    
+                     readExtension3=50, 
+                     nthreads=16         
+                    )
+
+dds.k4me3 <- calcNormFactors(DGEList(fc.k4me3$counts, group=names(bamfiles.k4me3)))
+
+tmm.logcpm.k4me3 <- log1p(cpm(dds.k4me3))
+
+var.k4me3 <- (apply(tmm.logcpm.k4me3, 1, function (x){var(x, na.rm = TRUE)})) 
+
+plot(density(var.k4me3))
+abline(v = quantile(var.k4me3)[3], col = "red")
+
+log.k4me3 <- var.k4me3 > quantile(var.k4me3)[3]
+```
+### Using featureCounts to compute coverage of H3K27me3 ChIP-seq data at all TSS regions
+
+```{r, message = F, fig.cap = "Figure 3: Density plot showing the distribution of variance of the normalized H3K27me3 counts at TSS regions. Red line represents the median density. All regions to the right of the red line are selected."}
+fc.k27me3 <- featureCounts( files=bamfiles.k27me3,    
+                     isPairedEnd=FALSE,
+                     annot.ext=anno.tss,   
+                     readExtension3=50, 
+                     nthreads=16        
+                    )
+
+dds.k27me3 <- calcNormFactors(DGEList(fc.k27me3$counts, group=names(bamfiles.k4me3)))
+
+tmm.logcpm.k27me3 <- log1p(cpm(dds.k27me3))
+
+var.k27me3 <- (apply(tmm.logcpm.k27me3, 1, function (x){var(x, na.rm = TRUE)})) 
+
+plot(density(var.k27me3))
+abline(v = quantile(var.k27me3)[3], col = "red")
+
+log.k27me3 <- var.k27me3 > quantile(var.k27me3)[3]
+
+```
+
+### Intersection of most variable regions from all datasets
+
+```{r}
+
+df.all <- cbind(log.atac, log.k4me3, log.k27me3)
+
+log.all <- apply(df.all, 1, all)
+
+sum(log.all)
+
+regions.sub <- regions[log.all]
+regions.sub
+```
+
+## Signal at promotor regions across forebrain development for all datasets
+
+```{r}
+
+source("clusterSignalMatrices2.R")
+by <- c(rep("ATAC", 6),rep("K4me3",7), rep("K27me3", 7))
+
+dat.E10.5 <- signal2Matrix(tracks.E10.5, regions.sub)
+dat.E11.5 <- signal2Matrix(tracks.E11.5, regions.sub)
+dat.E12.5 <- signal2Matrix(tracks.E12.5, regions.sub)
+dat.E13.5 <- signal2Matrix(tracks.E13.5, regions.sub)
+dat.E14.5 <- signal2Matrix(tracks.E14.5, regions.sub)
+dat.E15.5 <- signal2Matrix(tracks.E15.5, regions.sub)
+dat.E16.5 <- signal2Matrix(tracks.E16.5, regions.sub)
+
+dat <- signal2Matrix(tracklist, regions.sub)
+```
+
+### Clustering 
+
+```{r}
+set.seed(123) 
+cl <- clusterSignalMatrices2(dat, k=5, by = by)
+
+colors_ATAC <- c("1"="#F0D171", "2"="#D48849", "3"="#BD4545", "4"="#6D1950", "5" ="#20073A")
+colors_K4 <- c("1"="#070F1A", "2"="#225088", "3"="#3275C7", "4"="#5D93D7", "5"="#BBD2EE")
+colors_K27 <- c("1"="#402020", "2"="#753A3A", "3"="#A95454", "4"="#BD7B7B", "5"="#E4C9C9")
+```
+
+### Plotting TSS coverage for all datasets across time
+
+```{r, message = F, fig.cap = "Figure 4: Heatmaps showing TSS signal of all datasets at the different developmental stages after the identification of five clusters."}
+plotEnrichedHeatmaps(dat[1:6], scale_title="ATAC", row_split=cl, mean_color=colors_ATAC, trim=c(0.95)) +
+  plotEnrichedHeatmaps(dat[7:13], scale_title="H3K4me3", row_split=cl, colors=c("black","lightblue"), mean_color=colors_K4, trim=c(0.95)) +
+  plotEnrichedHeatmaps(dat[14:20], scale_title="H3K27me3", row_split=cl, colors = c("white","darkred"), mean_color=colors_K27)
+```
+
+
+```{r, message = F, fig.cap = "Figure 5: Heatmaps showing TSS signal for H3K4me3 and H3K27me3 at E10.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E10.5[1], scale_title="H3K4me3", colors=c("black","lightblue"), mean_color=colors_K4, trim=c(0.95), row_split=cl) + 
+  plotEnrichedHeatmaps(dat.E10.5[2], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+```{r, message = F, fig.cap = "Figure 6: Heatmaps showing TSS signal for ATAC, H3K4me3 and H3K27me3 at E11.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E11.5[1], scale_title="ATAC",row_split=cl, mean_color = colors_ATAC) +   
+  plotEnrichedHeatmaps(dat.E11.5[2], scale_title="H3K4me3", colors=c("black","lightblue"), row_split=cl, mean_color = colors_K4) + 
+  plotEnrichedHeatmaps(dat.E11.5[3], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+
+```{r, message = F, fig.cap = "Figure 7: Heatmaps showing TSS signal for ATAC, H3K4me3 and H3K27me3 at E12.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E12.5[1], scale_title="ATAC",row_split=cl, mean_color = colors_ATAC) +   
+  plotEnrichedHeatmaps(dat.E12.5[2], scale_title="H3K4me3", colors=c("black","lightblue"),row_split=cl, mean_color = colors_K4) + 
+  plotEnrichedHeatmaps(dat.E12.5[3], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+```{r, message = F, fig.cap = "Figure 8: Heatmaps showing TSS signal for ATAC, H3K4me3 and H3K27me3 at E13.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E13.5[1], scale_title="ATAC",row_split=cl, mean_color = colors_ATAC) +   
+  plotEnrichedHeatmaps(dat.E13.5[2], scale_title="H3K4me3", colors=c("black","lightblue"),row_split=cl, mean_color = colors_K4) + 
+  plotEnrichedHeatmaps(dat.E13.5[3], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+```{r, message = F, fig.cap = "Figure 9: Heatmaps showing TSS signal for ATAC, H3K4me3 and H3K27me3 at E14.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E14.5[1], scale_title="ATAC",row_split=cl, mean_color = colors_ATAC) +   
+  plotEnrichedHeatmaps(dat.E14.5[2], scale_title="H3K4me3", colors=c("black","lightblue"),row_split=cl, mean_color = colors_K4) + 
+  plotEnrichedHeatmaps(dat.E14.5[3], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+```{r, message = F, fig.cap = "Figure 10: Heatmaps showing TSS signal for ATAC, H3K4me3 and H3K27me3 at E15.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E15.5[1], scale_title="ATAC",row_split=cl, mean_color = colors_ATAC) +   
+  plotEnrichedHeatmaps(dat.E15.5[2], scale_title="H3K4me3", colors=c("black","lightblue"),row_split=cl, mean_color = colors_K4) + 
+  plotEnrichedHeatmaps(dat.E15.5[3], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+```{r, message = F, fig.cap = "Figure 11: Heatmaps showing TSS signal for ATAC, H3K4me3 and H3K27me3 at E16.5 after the identification of five clusters."}
+plotEnrichedHeatmaps(dat.E16.5[1], scale_title="ATAC",row_split=cl, mean_color = colors_ATAC) +   
+  plotEnrichedHeatmaps(dat.E16.5[2], scale_title="H3K4me3", colors=c("black","lightblue"),row_split=cl, mean_color = colors_K4) + 
+  plotEnrichedHeatmaps(dat.E16.5[3], scale_title="H3K27me3", colors = c("white","darkred"),row_split=cl, mean_color = colors_K27)
+```
+
+
+### Creating MA plots to check normalization
+
+```{r}
+edgeR::maPlot(fc.atac$counts[,1], fc.atac$counts[,2], lowess=TRUE); abline(h=0, lty="dashed")
+edgeR::maPlot(fc.atac$counts[,2], fc.atac$counts[,3], lowess=TRUE); abline(h=0, lty="dashed")
+edgeR::maPlot(fc.atac$counts[,3], fc.atac$counts[,4], lowess=TRUE); abline(h=0, lty="dashed")
+edgeR::maPlot(fc.atac$counts[,3], fc.atac$counts[,5], lowess=TRUE); abline(h=0, lty="dashed")
+edgeR::maPlot(fc.atac$counts[,5], fc.atac$counts[,6], lowess=TRUE); abline(h=0, lty="dashed")
+```
+
+
+### Plotting the mean signal values for each cluster across time for all datasets 
+
+```{r, fig.cap = "Figure 12: Mean signal of individual clusters per time point at TSS regions."}
+d <- meltSignals(dat, splitBy = cl)
+
+source("extractMeanfromMelt.R")
+
+df <- extractMeanfromMelt(d)
+
+df$Timepoint <- as.numeric(gsub(".*\\_E","", df$Sample))
+
+df$Datatype <- gsub("\\_E.*","", df$Sample)
+
+p1 <- ggplot(data = df[df$Datatype == "ATAC",], aes(x = Timepoint, y = Mean, color = Split )) + 
+  geom_line(lwd = 2) + 
+  geom_point(cex = 4) + 
+  theme_cowplot() +
+  scale_color_manual(values=c("#f0d171", "#d48849", "#bd4545", "#6d1950", "#20073a")) +
+  ggtitle("Mean ATAC coverage around TSS per cluster") +
+  scale_x_continuous(breaks = unique(df$Timepoint))
+
+p2 <- ggplot(data = df[df$Datatype == "H3K4me3",], aes(x = Timepoint, y = Mean, color = Split )) + 
+  geom_line(lwd = 2) + 
+  geom_point(cex = 4) + 
+  theme_cowplot() +
+  scale_color_manual(values=c("1"="#070F1A", "2"="#225088", "3"="#3275C7", "4"="#5D93D7", "5"="#BBD2EE")) +
+  ggtitle("Mean H3K4me3 coverage around TSS per cluster") +
+  scale_x_continuous(breaks = unique(df$Timepoint))
+
+p3 <- ggplot(data = df[df$Datatype == "H3K27",], aes(x = Timepoint, y = Mean, color = Split )) + 
+  geom_line(lwd = 2) + 
+  geom_point(cex = 4) + 
+  theme_cowplot() +
+  scale_color_manual(values=c("1"="#402020", "2"="#753A3A", "3"="#A95454", "4"="#BD7B7B", "5"="#E4C9C9")) +
+  ggtitle("Mean H3K27me3 coverage around TSS per cluster") +
+  scale_x_continuous(breaks = unique(df$Timepoint))
+
+p1 / p2 / p3
+```
+
+We identified five clusters based on signal across all 3 datasets (ATAC, H3K4me3 ChIP and H3K27me3 ChIP) over forebrain development. Clusters are very stable across time. Cluster 4 seems to decrease across developmental time in H3K27me3 signal, but the signal is quite noisy. 

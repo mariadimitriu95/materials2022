@@ -1,0 +1,166 @@
+---
+title: "Deconvolution of cell proporations in ATAC-seq samples"
+author: "Maria Dimitriu & Leonard C. Steg"
+date: '2022-06-20'
+output: html_document
+---
+
+## Loading packages
+```{r}
+suppressPackageStartupMessages({
+  library(BayesPrism)
+  library(stringr)
+  library(epiwraps)
+  library(GenomicRanges)
+  library(SummarizedExperiment) # structure to contain data+annotation
+  library(sechm) # for plotting heatmaps from SummarizedExperiment objects
+  library(edgeR) # count-based differential analysis
+  library(Rsubread) # for counting reads
+  library(ggplot2) # for plotting
+  library(patchwork)
+  library(cowplot)
+  library(viridis)
+})
+```
+
+## Download scATAC data and metadata of scATAC data
+
+The metadata includes the cell types to which the individual cells were annotated to.
+```{r, eval = F}
+options(timeout = 10000)
+download.file("http://krishna.gs.washington.edu/content/members/ajh24/mouse_atlas_data_release/matrices/atac_matrix.tfidf.qc_filtered.rds", 
+              destfile = "../data/scATAC/atac.matrix.filtered.rds")
+
+download.file("http://krishna.gs.washington.edu/content/members/ajh24/mouse_atlas_data_release/metadata/cell_metadata.txt", 
+              "../data/scATAC/metadata.txt")
+```
+Reading in the data
+```{r, eval = F}
+se <- readRDS("../data/scATAC/atac.matrix.filtered.rds")
+metadata <- read.delim("../data/scATAC/metadata.txt")
+
+```
+
+### Preparation of single cell data
+
+The metadata was subset based on the cell types of interest and then the SE was subset on the cells within the metadata. (While the naming of the SE might imply it is a SummerizedExperiment object, this is actually not true in this case)
+```{r, eval = F}
+metadata <- metadata[metadata$tissue == "WholeBrain",]
+
+names(table(metadata$cell_label[table(metadata$cell_label) > 50]))
+
+metadata <- metadata[metadata$cell_label %in% names(table(metadata$cell_label))[table(metadata$cell_label) > 50],]
+metadata <- metadata[metadata$cell_label != "Unknown" & metadata$cell_label != "Collisions",]
+
+se <- se[,colnames(se) %in% metadata$cell]
+identical(ncol(se), nrow(metadata))
+dim(se)
+dim(metadata)
+
+se <- t(se)
+```
+
+
+
+BayesPrism requires 2 metadata columns. One is the cell type, which includes the broad cell type (like Glia, excitatory neurons and inhibitory neurons) and the other one is cell state, which describes the more detailed subtype of the cell (i.e. Astrocytes or microglia for Glia). 
+```{r, eval = F}
+metadata$cell_state <- "Inh. Neuron"
+metadata[metadata$cell_label %in% c("Cerebellar granule cells", "Ex. neurons SCPN", "Ex. neurons CThPN", "Ex. neurons CPN"), "cell_state"] <- "Ex. Neuron"
+metadata[metadata$cell_label %in% c("Astrocytes", "Microglia", "Oligodendrocytes"), "cell_state"] <- "Glia"
+metadata[metadata$cell_label == "Endothelial II cells", "cell_state"] <- "Endothelial"
+
+colnames(metadata)[11:12] <- c("cell.state","cell.type")
+
+```
+
+Save files
+```{r, eval = F}
+saveRDS(se, "../data/scATAC/atac.matrix.filtered.brain.rds")
+save(metadata, file = "../data/scATAC/metadata.Rdata")
+```
+
+Load files
+```{r}
+se <- readRDS("../data/scATAC/atac.matrix.filtered.brain.rds")
+load("../data/scATAC/metadata.Rdata")
+```
+
+
+### Preparation of bulk data
+
+The used regions for this analysis were the bins used in the scATAC data. Bulk data was quantified onto these regions using featureCounts
+```{r, message=F}
+regions <- GRanges(seqnames = gsub("\\_.*", "", colnames(se)), 
+                   IRanges(start = as.numeric(str_match(colnames(se), "\\_(.*?)\\_")[,2]), end = as.numeric(gsub(".*\\_", "", colnames(se)))))
+
+bamfiles <- list.files("../data/merged/", pattern="ATAC_E1.\\.5.bam$", full=TRUE)
+# we give the samples clean names:
+names(bamfiles) <- gsub("\\.bam","",basename(bamfiles))
+bamfiles
+# for counting, we need to convert our GRanges object to a data.frame with the following specifications:
+anno <- cbind(name=as.character(regions), as.data.frame(regions))
+anno$width <- NULL
+colnames(anno) <- c("GeneID", "Chr", "Start", "End", "Strand")
+
+fc <- featureCounts( files=bamfiles,    # the files in which we want to count reads
+                     isPairedEnd=FALSE,
+                     annot.ext=anno,    # the regions in which we want to count reads
+                     readExtension3=50, # extend the reads by 50bp
+                     nthreads=16         # multithreading (to speed up)
+                    )
+
+
+```
+
+```{r}
+bulk <- t(fc$counts)
+colnames(bulk) <- colnames(se)
+```
+
+
+## Running deconvolution 
+
+A prism object is created including single cell data, bulk data and the reference cell types and cell states.
+```{r}
+mat <- as.matrix(se)
+
+myPrism <- new.prism(
+  reference=mat, 
+  mixture=bulk,
+  input.type="count.matrix", 
+  cell.type.labels = metadata$cell.type, 
+  cell.state.labels = metadata$cell.state,
+  key=NULL,
+  outlier.cut=0.01,
+  outlier.fraction=0.1
+)
+```
+BayesPrism is run and saved.
+```{r}
+res <- run.prism(prism = myPrism, n.cores=16)
+
+save(res, file = "../output/scATAC/res.Prism.Rdata")
+```
+
+
+## Resulting cell proportions in the bulk data.
+
+```{r, fig.cap= "Figure 1: Cell proporations per bulk dataset. Proportions of endothelial cells, glia, inhibitory neurons and excitatory neurons are presented in percent."}
+load("../output/scATAC/res.Prism.Rdata")
+theta <- get.fraction(bp=res,
+            which.theta="final",
+            state.or.type="type")
+df <- data.frame(sort(rep(rownames(theta), 4)), rep(colnames(theta),6), round(as.vector(t(theta))*100, 2))
+colnames(df) <- c("Timepoint", "CellType", "Percentage")
+
+df$Timepoint <- gsub("\\.bam","",df$Timepoint)
+df$Timepoint <- gsub("ATAC\\_","", df$Timepoint)
+df
+ggplot(df, aes(fill=factor(CellType, levels=c("Endothelial", "Glia","Ex. Neuron", "Inh. Neuron")), y=Percentage, x=Timepoint)) + 
+  geom_bar(position="stack", stat="identity") +
+  theme_cowplot() + 
+  scale_fill_viridis(discrete = T, option = "G") +
+  guides(fill=guide_legend(title="Cell Type"))
+```
+Using BayesPrismn we were able to extract the cell type proportions in our bulk ATAC datasets. We observed an increase of inhibitory neurons over time (from 14.4% to 19.5%), while the proportion of excitatory neurons decrease (from 73.3% to 68.6%). Glia cells are stably represented in all datasets with a proportion between 10.5% and 11.9%. Endothelial cells were only observed in the early timepoints, but only at low abundance (1.8%) and their proportion decreased to 0% from timepoint 13.5 on.
+

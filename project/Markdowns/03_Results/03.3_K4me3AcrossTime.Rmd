@@ -1,0 +1,163 @@
+---
+title: "H3K4me3 trajectories in forebrain development"
+author: "Maria Dimitriu & Leonard C. Steg"
+date: '2022-06-17'
+output: html_document
+---
+
+## Load packages
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(GenomicRanges)
+  library(SummarizedExperiment) # structure to contain data+annotation
+  library(sechm) # for plotting heatmaps from SummarizedExperiment objects
+  library(edgeR) # count-based differential analysis
+  library(Rsubread) # for counting reads
+  library(ggplot2) # for plotting
+  library(patchwork) # for arranging plots together
+  library(AnnotationHub)
+  library(BiocParallel)
+  library(cowplot)
+  library(parallel)
+})
+```
+
+## Load H3K4me3 peaks and exploration
+```{r, message = F, fig.cap = "Figure 1: Heatmap indicating the H3K4me3 peak overlaps between samples of different time points. Samples were clustered based on peak-similarity using kmeans clustering. Upset plot to visualize numbers of overlapping peaks between all samples."}
+# create a vector with all the peak files in it, and giving it clean names:
+peakfiles.k4me3 <- list.files("../data/peaks/chip", pattern = "narrowPeak", full=TRUE)
+names(peakfiles.k4me3) <- gsub("_peaks\\.narrowPeak","",basename(peakfiles.k4me3))
+peakfiles.k4me3
+
+# import each file, and look at the overlaps between peaks
+peaks.k4me3 <- lapply(peakfiles.k4me3, FUN=rtracklayer::import)
+regionOverlaps(peaks.k4me3)
+regionUpset(peaks.k4me3, nsets = 7, nintersects = NA)
+```
+Here again we see the samples at the earliest developmental stage (E10.5) having the largest number of unique peaks. However, E11.5 and E12.5 do not have any unique peaks and do share all peaks with all other samples (except 1 single peak that is not shared with E16.5). The clustering clusters samples 11.5 and 12.5 together, and 10.5 next to the pair. Similiar to the ATAC data, all clusters of later time points are clustered together.
+
+## Definition of regions, quantification normalization and subsetting of peaks of interest
+
+### Define new regions by overlapping peaks of all ATAC datasets and remove regions that are only present in one sample each
+```{r}
+merged.peaks.k4me3 <- reduce(unlist(GRangesList(peaks.k4me3)), with.revmap=TRUE)
+merged.peaks.k4me3 <- granges(merged.peaks.k4me3[lengths(merged.peaks.k4me3$revmap)>1]) # we could change the >1 here to require a higher minimum number of samples
+merged.peaks.k4me3
+```
+
+### Quantifying counts in newly defined overlapping regions. 
+```{r, message=F}
+
+# create a vector with all the alignment files in it, and giving it clean names:
+bamfiles.k4me3 <- list.files("../data/merged", pattern="H3K4me3_E1.\\.5.bam$", full=TRUE)
+# we give the samples clean names:
+names(bamfiles.k4me3) <- gsub("\\.bam","",basename(bamfiles.k4me3))
+
+# for counting, we need to convert our GRanges object to a data.frame with the following specifications:
+anno.k4me3 <- cbind(name=as.character(merged.peaks.k4me3), as.data.frame(merged.peaks.k4me3))
+anno.k4me3$width <- NULL
+colnames(anno.k4me3) <- c("GeneID", "Chr", "Start", "End", "Strand")
+
+fc.k4me3 <- featureCounts( files=bamfiles.k4me3,    # the files in which we want to count reads
+                     isPairedEnd=FALSE,
+                     annot.ext=anno.k4me3,    # the regions in which we want to count reads
+                     readExtension3=50, # extend the reads by 50bp
+                     nthreads=16         # multithreading (to speed up)
+                    )
+```
+
+### Normalizing samples (and extract normalization factors) 
+```{r}
+se.k4me3 <- SummarizedExperiment( list(counts=fc.k4me3$counts), rowRanges=merged.peaks.k4me3 )
+se.k4me3
+
+dds <- calcNormFactors(DGEList(assay(se.k4me3), group=colnames(se.k4me3)))
+assays(se.k4me3)$tmm.logcpm <- log1p(cpm(dds))
+
+colData(se.k4me3)$normfactors <- dds$samples$norm.factors
+
+saveRDS(se.k4me3, file = "../data/se/H3K4me3_cov_mergedPeaks.rds")
+
+```
+
+### Subsetting peaks based on variance across development. 
+```{r}
+se.k4me3 <- readRDS(file = "../data/se/H3K4me3_cov_mergedPeaks.rds")
+
+tmm.logcpm <- assays(se.k4me3)$tmm.logcpm
+
+elementMetadata(merged.peaks.k4me3)$var <- (apply(tmm.logcpm, 1, function (x){var(x, na.rm = TRUE)})) 
+
+plot(density((merged.peaks.k4me3$var)))
+abline(v = 0.03, col = "red")
+
+merged.peaks.k4me3.sub <- merged.peaks.k4me3[merged.peaks.k4me3$var >= 0.03]
+length(merged.peaks.k4me3.sub)
+
+```
+## Preparation and annotation of DNase hypersensitivity data to identify regulatory regions.
+### Annotation of DNase hypersensitivity file and subsetting for promotor regions and enhancer regions. 
+
+```{r}
+anno <- read.table(file = "../data/annotation/DNaseHypersensitive.tsv", sep = '\t', header = TRUE)
+
+anno <- GRanges(seqnames = anno$chr, ranges = IRanges(start = anno$start, end = anno$end))
+
+ah <- AnnotationHub()
+ensdb <- ah[["AH89211"]]
+
+seqlevelsStyle(anno) <- "ensembl"
+seqlevelsStyle(merged.peaks.k4me3.sub) <- "ensembl"
+
+overlaps <- merged.peaks.k4me3.sub[overlapsAny(merged.peaks.k4me3.sub, anno)]
+
+DNaseHS.regions <- annotateRegions(overlaps, ensdb)
+
+prom <- DNaseHS.regions[abs(DNaseHS.regions$distance2nearestTSS) < 1000]
+
+```
+
+
+
+
+
+## H3K4me3 signal at promotor regions across forebrain development.
+```{r, message=F, fig.cap = "Figure 2:Heatmaps showing promotor H3K4me3 signals at the different developmental stages after the identification of five clusters."}
+seqlevelsStyle(prom) <- "UCSC"
+set.seed(123) 
+
+tracklist.k4me3 <- list.files("../data/tracks/chip", pattern = "H3K4me3", full = T)
+
+dat.prom <- rescaleSignalMatrices(signal2Matrix(tracklist.k4me3, prom, BPPARAM = MulticoreParam(detectCores())),scaleFactors=1/se.k4me3$normfactors)
+
+cl.prom <- clusterSignalMatrices(dat.prom, k=5, scaleRows = T)
+
+plotEnrichedHeatmaps(dat.prom, row_split=cl.prom, scale_rows = "global", colors=c("black","lightblue"), mean_color =  c("1"="#070F1A", "2"="#225088", "3"="#3275C7", "4"="#5D93D7", "5"="#BBD2EE"))
+```
+```{r, fig.cap = "Figure 3: Mean ATAC signal of individual clusters per time point at promotor regions."}
+d.prom <- meltSignals(dat.prom, splitBy=cl.prom)
+
+source("extractMeanfromMelt.R")
+
+df.prom <- extractMeanfromMelt(d.prom)
+
+df.prom$Timepoint <- as.numeric(gsub("H3K4me3\\_E","", df.prom$Sample))
+
+ggplot(data = df.prom, aes(x = Timepoint, y = Mean, color = Split )) + 
+  geom_line(lwd = 2) + 
+  geom_point(cex = 4) + 
+  theme_cowplot() +
+  scale_color_manual(values=c("#070f1a", "#225088", "#3275c7", "#5d93d7", "#bbd2ee")) +
+  ggtitle("Mean H3K4me3 signal in promoter region centers per Cluster") +
+  scale_x_continuous(breaks = unique(df.prom$Timepoint))
+```
+We identified five clusters based on their H3K4me3 signal over forebrain development. Clusters 2 & 4 show a similar pattern increasing throughout development with a short dip at E11.5. Cluster 5 is highest at E10.5 and decreases from there on. Clusters 1 and 3 are stable over time. 
+
+```{r}
+sessionInfo()
+```
+
+
+
+

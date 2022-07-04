@@ -1,0 +1,232 @@
+---
+title: "Preprocessing of the data"
+author: "Maria Dimitriu & Leonard C. Steg"
+date: '2022-06-23'
+output: html_document
+---
+
+## Download Data
+
+### Create vectors with the respective codes for each dataset.
+```{r}
+H3K4me3 <- c("ENCFF898EWU","ENCFF403SQM", "ENCFF001ZTX", "ENCFF001ZTY", "ENCFF232IYQ", "ENCFF470QWO", "ENCFF596BNN", "ENCFF053SSJ", "ENCFF002AME", "ENCFF002AMD", "ENCFF212KTV", "ENCFF082LJL", "ENCFF002BWS", "ENCFF002BWU")
+
+H3K27me3 = c("ENCFF429ISC", "ENCFF445IOU", "ENCFF001ZTI", "ENCFF107TLH", "ENCFF811HJY", "ENCFF326UOO", "ENCFF406FUF", "ENCFF900XIV", "ENCFF002AFY", "ENCFF002AFZ", "ENCFF096XZW", "ENCFF079GEV", "ENCFF002ESD", "ENCFF002ESA")
+
+H3K4me1 = c("ENCFF069IQM", "ENCFF981WQT", "ENCFF123MKU", "ENCFF001ZRT", "ENCFF115BHE", "ENCFF128OTX", "ENCFF388QNU", "ENCFF106YCA", "ENCFF002AJC", "ENCFF002AJE", "ENCFF482TKQ", "ENCFF086BUY", "ENCFF002ESR", "ENCFF002EST")
+
+ATAC = c("ENCFF419LDW", "ENCFF083TDB", "ENCFF413XTH", "ENCFF199UBT", "ENCFF401VUV", "ENCFF721LGJ", "ENCFF048MTG", "ENCFF633MTW", "ENCFF906VXU", "ENCFF248PXW", "ENCFF776GDQ", "ENCFF058IAE")
+
+controls = c("ENCFF126KYO", "ENCFF001ZUS", "ENCFF788YDC", "ENCFF037ZOC", "ENCFF002APQ", "ENCFF291VOE", "ENCFF002BXL")
+```
+
+Description of datasets:
+All datasets were publically avaibable on encodeproject.org.
+For the non-control samples, all samples were downloaded in biological replicates. 
+For the ChIP-seq datasets (H3K4me3, H3K4me1, H3K27me3 and controls), samples were available from E10.5 to E16.5 (E meaning embryonic day). 
+For ATAC-seq, no samples were available for E10.5, so the samples in the project were from E11.5 to 16.5
+
+For most samples data was generated with a read length of 50 bp, except for the ChIP datasets at E14.5 and E16.5 and for H3K4me3 at E11.5, which had read lengths of 35 bp.
+
+### Run for loops to download all datasets
+```{r, eval = F}
+options(timeout = 10000)
+
+for (i in 1:length(ATAC)){
+    download.file(url = paste0("https://www.encodeproject.org/files/",ATAC[i],"/@@download/",ATAC[i],".fastq.gz"),
+                dest=paste0("/mnt/groupMansuy/epibioinfo/data/raw/atac/",ATAC[i],".fastq.gz"))
+}
+
+for (i in 1:length(H3K4me1)){
+    download.file(url = paste0("https://www.encodeproject.org/files/",H3K4me1[i],"/@@download/",H3K4me1[i],".fastq.gz"),
+                dest=paste0("/mnt/groupMansuy/epibioinfo/data/raw/h3k4me1/",H3K4me1[i],".fastq.gz"))
+}
+
+for (i in 1:length(H3K27me3)){
+    download.file(url = paste0("https://www.encodeproject.org/files/",H3K27me3[i],"/@@download/",H3K27me3[i],".fastq.gz"),
+                dest=paste0("/mnt/groupMansuy/epibioinfo/data/raw/h3k27me3/",H3K27me3[i],".fastq.gz"))
+}
+
+for (i in 1:length(H3K4me3)){
+    download.file(url = paste0("https://www.encodeproject.org/files/",H3K4me3[i],"/@@download/",H3K4me3[i],".fastq.gz"),
+                dest=paste0("/mnt/groupMansuy/epibioinfo/data/raw/h3k4me3/",H3K4me3[i],".fastq.gz"))
+}
+
+for (i in 1:length(controls)){
+  download.file(url = paste0("https://www.encodeproject.org/files/",controls[i],"/@@download/",controls[i],".fastq.gz"),
+                dest=paste0("/mnt/groupMansuy/epibioinfo/data/controls/",controls[i],".fastq.gz"))
+}
+```
+
+## Quality control
+
+### Run loops with fastQC
+
+```{bash engine.opts='-l', eval=F}
+for FILE in data/raw/atac/*; do scripts/fastqc.sh output/qc/atac/ $FILE; done
+for FILE in data/raw/h3k4me3/*; do scripts/fastqc.sh output/qc/h3k4me3/ $FILE; done
+for FILE in data/raw/h3k4me1/*; do scripts/fastqc.sh output/qc/h3k4me1/ $FILE; done
+for FILE in data/raw/h3k27me3/*; do scripts/fastqc.sh output/qc/h3k27me3/ $FILE; done
+for FILE in data/controls/*; do scripts/fastqc.sh output/qc/control/ $FILE; done
+```
+
+### Merge FastQC files using multiQC
+```{bash engine.opts='-l', eval=F}
+multiqc -f -o output/qc/h3k4me3 output/qc/h3k4me3
+multiqc -f -o output/qc/h3k4me1 output/qc/h3k4me1
+multiqc -f -o output/qc/h3k27me3 output/qc/h3k27me3
+multiqc -f -o output/qc/atac output/qc/atac
+multiqc -f -o output/qc/control outout/qc/control
+```
+
+The quality of all datasets is good. Duplication rates are generally below 25 % (with only a few exceptions). Read lengths do vary as expected between 36 and 51 bp, with the majority of datasets having a read length of 51 bp. Mean quality scores are good for all datasets, with all scores being above 30 over the full length of reads. We conclude that trimming will not be needed, as there are no overrepresented sequences from sequencing or Tn5 adapters and the quality of reads does not drop towards the end.
+
+## Alignment
+
+### Running alignment using bowtie2 on default settings. mm10 was used as reference genome
+
+```{bash engine.opts='-l', eval=F}
+for FILE in data/raw/atac/*fastq.gz; do scripts/alignment.sh $FILE data/aligned/atac/ logs/bowtie2/atac/ data/mm10/mm10; done
+for FILE in data/raw/h3k4me1/*fastq.gz; do scripts/alignment.sh $FILE data/aligned/h3k4me1/ logs/bowtie2/h3k4me1/ data/mm10/mm10; done
+for FILE in data/raw/h3k4me3/*fastq.gz; do scripts/alignment.sh $FILE data/aligned/h3k4me3/ logs/bowtie2/h3k4me3/ data/mm10/mm10; done
+for FILE in data/raw/h3k27me3/*fastq.gz; do scripts/alignment.sh $FILE data/aligned/h3k27me3/ logs/bowtie2/h3k27me3/ data/mm10/mm10; done
+for FILE in data/raw/h3k27me3/*fastq.gz; do scripts/alignment.sh $FILE data/aligned/h3k27me3/ logs/bowtie2/h3k27me3/ data/mm10/mm10; done
+for FILE in data/controls/*fastq.gz; do scripts/alignment.sh $FILE data/aligned/controls/ logs/bowtie2/controls/ data/mm10/mm10; done
+```
+
+### Extracting mapping rates per sample
+```{bash engine.opts='-l', eval=F}
+for f in /mnt/groupMansuy/epibioinfo/logs/bowtie2/h3k4me3/ENCF*
+do
+firstCol=$(echo ${f##*/})
+secondCol=$(awk '{if(NR==6) print $1}' $f)
+printf "%s\t%s\n" "$firstCol" "$secondCol" >> H3K4me3_stats.tsv
+done
+
+for f in /mnt/groupMansuy/epibioinfo/logs/bowtie2/h3k27me3/ENCF*
+do
+firstCol=$(echo ${f##*/})
+secondCol=$(awk '{if(NR==6) print $1}' $f)
+printf "%s\t%s\n" "$firstCol" "$secondCol" >> H3K27me3_stats.tsv
+done
+
+for f in /mnt/groupMansuy/epibioinfo/logs/bowtie2/h3k4me1/ENCF*
+do
+firstCol=$(echo ${f##*/})
+secondCol=$(awk '{if(NR==6) print $1}' $f)
+printf "%s\t%s\n" "$firstCol" "$secondCol" >> H3K4me1_stats.tsv
+done
+
+for f in /mnt/groupMansuy/epibioinfo/logs/bowtie2/atac/ENCF*
+do
+firstCol=$(echo ${f##*/})
+secondCol=$(awk '{if(NR==6) print $1}' $f)
+printf "%s\t%s\n" "$firstCol" "$secondCol" >> atac_stats.tsv
+done
+
+for f in /mnt/groupMansuy/epibioinfo/logs/controls/ENCF*
+do
+firstCol=$(echo ${f##*/})
+secondCol=$(awk '{if(NR==6) print $1}' $f)
+printf "%s\t%s\n" "$firstCol" "$secondCol" >> controls_stats.tsv
+done
+```
+
+#### ATAC samples mapping rates
+```{r}
+read.table(file = '../logs/atac_stats.tsv', sep = '\t')
+```
+#### Histone PTMs mapping rates
+```{r}
+cbind("H3K4me3" = read.table(file = '../logs/H3K4me3_stats.tsv', sep = '\t'), 
+      "H3K4me1" = read.table(file = '../logs/H3K4me1_stats.tsv', sep = '\t'), 
+      "H3K27me3" = read.table(file = '../logs/H3K27me3_stats.tsv', sep = '\t'))
+```
+
+#### Control samples mapping rates
+```{r}
+read.table(file = "../logs/controls_stats.tsv", sep = '\t')
+```
+
+The mapping of all samples on the reference genome was done successfully. Mapping rates were generally above 85 %, with only one excemption. 
+
+## Renaming files
+
+To have more meaningful file names, the files were renamed to indicate the datatype, timepoint and replicate.
+
+```{bash engine.opts='-l', eval=F}
+path=/mnt/groupMansuy/epibioinfo/data/aligned/indexed
+colNames=("timepoint", "H3K4me3_rep1", "H3K4me3_rep2", " H3K27_rep1", "H3K27_rep2", "H3K4me1_rep1", "H3K4me1_rep2", "ATAC_rep1", "ATAC_rep2")
+it=0
+
+while read line
+do
+timepoint=$(echo $line|awk -F',' '{print $1}')
+for i in ${colNames[@]}
+do
+((it=it+1))
+if [[ "$it" == '1' ]];
+then continue
+fi
+#echo $it
+new_name="${i}_${timepoint}"
+final_name=$(echo "$new_name" | tr -d '"')
+final_name=$(echo "$final_name" | tr -d ',')
+#echo $final_name
+old_name=$(echo $line|awk -v var="$it" -F',' '{print $var}')
+old_name=$(echo "$old_name" | tr -d ',')
+old_name=$(echo "$old_name" | tr -d '"')
+#echo $old_name
+if [[ "$old_name" == 'NA' ]];
+then continue
+fi
+echo $old_name "will be renamed to" $final_name >> Naming.txt
+mv $path/$old_name.bam $path/$final_name.bam
+done
+it=0
+done < $path/datasets.csv
+```
+
+
+## Filtering
+
+In the filtering step we remove duplicates, blacklisted regions, mitochondrial regions, unaligned reads and reads with bad alignment scores.
+```{bash engine.opts='-l', eval=F}
+for FILE in data/aligned/indexed/*.bam; do scripts/filter.sh $FILE data/filtered/ logs/stats/ data/mm10/blacklist_mm10_v2.bed data/tmp/; done
+```
+
+
+## Merging replicates
+
+Replicates were merged and the merged bam files were indexed again.
+```{bash engine.opts='-l', eval=F}
+for FILE in data/aligned/indexd/*.bam; do scripts/mergeindex.sh $FILE data/merged/; done
+```
+
+## Create tracks in bw format
+
+Tracks were created using BamCoverage with binSize = 20 and normalized to BPM. ATAC and ChIP datasets were treated differently, because control samples were available for ChIP but not ATAC. The ChIP control samples were used to normalize ChIP samples across datasets per timepoint.
+
+### ChIP
+```{bash engine.opts='-l', eval=F, echo=T}
+for FILE in data/merged/H3*.bam; do scripts/tracksChIP.sh $FILE data/filtered/ data/tracks/chip/; done
+```
+
+### ATAC
+```{bash engine.opts='-l', eval=F, echo=T}
+for FILE in data/merged/*ATAC*.bam; do bash scripts/tracksATAC.sh $FILE logs/tracks/ data/tracks/atac/; done
+```
+
+## Peakcalling
+
+Peakcalling was performed in different ways dependent on the datatype. ATAC peaks were called without using a control sample. For ChIP peaks, H3K4me3 peaks were called as narrowPeaks while H3K27me3 and H3K4me1 peaks were called as braod peaks.
+
+```{bash engine.opts='-l', eval=F, echo=T}
+for FILE in data/merged/ATAC*.bam; do scripts/peaksATAC.sh $FILE logs/macs2/ data/peaks/atac/; done
+```
+
+```{bash engine.opts='-l', eval=F, echo=T}
+for FILE in data/merged/H3K4me1*.bam; do scripts/peaksChIPBroad.sh $FILE data/filtered/ logs/macs2/ data/peaks/chip/;done  
+for FILE in data/merged/H3K27*.bam; do scripts/peaksChIPBroad.sh $FILE data/filtered/ logs/macs2/ data/peaks/chip/;done
+for FILE in data/merged/H3K4me3*.bam; do scripts/peaksChIPNarrow.sh $FILE data/filtered/ logs/macs2/ data/peaks/chip/;done
+```
