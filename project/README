@@ -1,0 +1,3 @@
+The "Markdowns" folder contains markdowns for the introduction, methods, results, discussion and references. 
+The "Scripts" folder contains the bash scripts called from within the results markdowns. 
+The "QC" folder contains the FastQC results and the summary of mapping rates. 
